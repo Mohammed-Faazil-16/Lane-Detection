@@ -29,7 +29,7 @@ Clone the Repository
 
 bash
 Copy code
-git clone https://github.com/yourusername/lane-detection.git
+git clone https://github.com/Mohammed-Faazil-16/Lane-Detection.git
 cd lane-detection
 Run the Lane Detection Script
 
