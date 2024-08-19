@@ -1,0 +1,160 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 0,
+  "metadata": {
+    "colab": {
+      "provenance": [],
+      "authorship_tag": "ABX9TyNyQgZglF7bzb909Ky98xTC",
+      "include_colab_link": true
+    },
+    "kernelspec": {
+      "name": "python3",
+      "display_name": "Python 3"
+    },
+    "language_info": {
+      "name": "python"
+    }
+  },
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "view-in-github",
+        "colab_type": "text"
+      },
+      "source": [
+        "<a href=\"https://colab.research.google.com/github/Mohammed-Faazil-16/Lane-Detection/blob/main/notebooks\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 3,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "jIn0UYsfzWon",
+        "outputId": "807dff54-e3dc-4e1f-d685-6d6f3ef5df8c"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Video processing complete. The output video is saved as 'output_video.mp4'.\n"
+          ]
+        }
+      ],
+      "source": [
+        "import cv2\n",
+        "import numpy as np\n",
+        "from google.colab.patches import cv2_imshow\n",
+        "\n",
+        "\n",
+        "\n",
+        "#Road Lane Detection by Processing Video\n",
+        "# Made by A Mohammed Faazil\n",
+        "\n",
+        "def canny(image):\n",
+        "    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)\n",
+        "    blur = cv2.GaussianBlur(gray, (5, 5), 0)\n",
+        "    canny = cv2.Canny(blur, 50, 150)\n",
+        "    return canny\n",
+        "\n",
+        "def region_of_interest(image):\n",
+        "    height = image.shape[0]\n",
+        "    polygons = np.array([\n",
+        "        [(200, height), (1100, height), (550, 250)]\n",
+        "    ])\n",
+        "    mask = np.zeros_like(image)\n",
+        "    cv2.fillPoly(mask, polygons, 255)\n",
+        "    masked_image = cv2.bitwise_and(image, mask)\n",
+        "    return masked_image\n",
+        "\n",
+        "def display_lines(image, lines):\n",
+        "    line_image = np.zeros_like(image)\n",
+        "    if lines is not None:\n",
+        "        for line in lines:\n",
+        "            x1, y1, x2, y2 = line.reshape(4)\n",
+        "            cv2.line(line_image, (x1, y1), (x2, y2), (255, 0, 0), 10)\n",
+        "    return line_image\n",
+        "\n",
+        "def make_coordinates(image, line_parameters):\n",
+        "    try:\n",
+        "        slope, intercept = line_parameters\n",
+        "    except TypeError:\n",
+        "        return np.array([0, 0, 0, 0])\n",
+        "\n",
+        "    y1 = image.shape[0]\n",
+        "    y2 = int(y1 * (3 / 5))\n",
+        "    x1 = int((y1 - intercept) / slope)\n",
+        "    x2 = int((y2 - intercept) / slope)\n",
+        "    return np.array([x1, y1, x2, y2])\n",
+        "\n",
+        "def average_slope_intercept(image, lines):\n",
+        "    left_fit = []\n",
+        "    right_fit = []\n",
+        "    for line in lines:\n",
+        "        x1, y1, x2, y2 = line.reshape(4)\n",
+        "        parameters = np.polyfit((x1, x2), (y1, y2), 1)\n",
+        "        slope = parameters[0]\n",
+        "        intercept = parameters[1]\n",
+        "        if slope < 0:\n",
+        "            left_fit.append((slope, intercept))\n",
+        "        else:\n",
+        "            right_fit.append((slope, intercept))\n",
+        "    left_fit_average = np.average(left_fit, axis=0) if left_fit else None\n",
+        "    right_fit_average = np.average(right_fit, axis=0) if right_fit else None\n",
+        "    left_line = make_coordinates(image, left_fit_average)\n",
+        "    right_line = make_coordinates(image, right_fit_average)\n",
+        "    return np.array([left_line, right_line])\n",
+        "\n",
+        "# Load video\n",
+        "cap = cv2.VideoCapture('test_video.mp4')\n",
+        "\n",
+        "# Get video properties\n",
+        "width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))\n",
+        "height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))\n",
+        "fps = int(cap.get(cv2.CAP_PROP_FPS))\n",
+        "\n",
+        "# Define the codec and create a VideoWriter object\n",
+        "fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec for .mp4 files\n",
+        "out = cv2.VideoWriter('output_video.mp4', fourcc, fps, (width, height))\n",
+        "\n",
+        "while cap.isOpened():\n",
+        "    ret, frame = cap.read()\n",
+        "    if not ret:\n",
+        "        break\n",
+        "\n",
+        "    # Apply Canny edge detection\n",
+        "    canny_image = canny(frame)\n",
+        "\n",
+        "    # Define and apply region of interest\n",
+        "    cropped_image = region_of_interest(canny_image)\n",
+        "\n",
+        "    # Detect lines using Hough Transform\n",
+        "    lines = cv2.HoughLinesP(cropped_image, 2, np.pi / 180, 100, np.array([]), minLineLength=40, maxLineGap=5)\n",
+        "\n",
+        "    # Average and display lines\n",
+        "    averaged_lines = average_slope_intercept(frame, lines)\n",
+        "    line_image = display_lines(frame, averaged_lines)\n",
+        "    combo_image = cv2.addWeighted(frame, 0.8, line_image, 1, 1)\n",
+        "\n",
+        "    # Write the frame to the output video\n",
+        "    out.write(combo_image)\n",
+        "\n",
+        "    if cv2.waitKey(1) & 0xFF == ord('q'):\n",
+        "        break\n",
+        "\n",
+        "# Release everything if job is finished\n",
+        "cap.release()\n",
+        "out.release()\n",
+        "cv2.destroyAllWindows()\n",
+        "\n",
+        "print(\"Video processing complete. The output video is saved as 'output_video.mp4'.\")\n",
+        "\n",
+        ""
+      ]
+    }
+  ]
+}
